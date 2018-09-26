@@ -25,7 +25,6 @@ DIR_EXTRACT = os.path.join(BASE_DIR, DIR_BUILD, DIR_ASSETS, 'extracted_costumes'
 COSTUME_KEYS = ('name', 'md5', 'type', 'tags', 'info')
 BACKDROP_KEYS = ('name', 'md5', 'type', 'tags', 'info')
 SOUND_KEYS = ('name', 'md5', 'sampleCount', 'rate', 'format', 'tags')
-URL = 'https://codepku.cdn.....'
 
 def generate_backdrops():
     '''
@@ -33,14 +32,17 @@ def generate_backdrops():
     create md5 backdrop files
     '''
     backdrops = []
+    backdrops_tags = []
     for root, dirs, files in os.walk(DIR_BACKDROPS):
+        backdrops_tags += dirs
         for filename in files:
             full_path = os.path.join(root, filename)
             with open(full_path, "r") as f:
                 data = f.read()
                 md5name = hashlib.md5(data).hexdigest() + "." + filename.split(".")[1]
             current_dir = re.sub(r"(\S*/assets/)", "", full_path)
-            tags = current_dir.split("/")[:-1]
+            # tags = current_dir.split("/")[:-1]
+            tags = current_dir.split("/")[1:2]
             extension = os.path.splitext(full_path)[1]
             if extension == '.png':
                 im = Image.open(full_path)
@@ -70,20 +72,26 @@ def generate_backdrops():
     with open(json_path, 'w') as outfile:
         json.dump(backdrops, outfile)
 
+    # tag_json_path = os.path.join(BASE_DIR, DIR_BUILD, DIR_JSON, 'backdrops_tags.json')
+    # with open(tag_json_path, 'w') as outfile:
+    #     json.dump(backdrops_tags, outfile)
+
 def generate_sounds():
     '''
     create sounds.json
     create md5 sound files
     '''
     sounds = []
+    sounds_tags = []
     for root, dirs, files in os.walk(DIR_SOUNDS):
+        sounds_tags += dirs
         for filename in files:
             full_path = os.path.join(root, filename)
             with open(full_path, 'r') as f:
                 data = f.read()
                 md5name = hashlib.md5(data).hexdigest() + "." + filename.split(".")[1]
             current_dir = re.sub(r"(\S*/assets/)", "", full_path)
-            tags = current_dir.split("/")[1:-1]
+            tags = current_dir.split("/")[1:2]
             md5path = os.path.join(DIR_SOUNDS_MD5, md5name)
             with audioread.audio_open(full_path) as f:
                 sample_rate = f.samplerate
@@ -103,6 +111,10 @@ def generate_sounds():
     with open(json_path, 'w') as outfile:
         json.dump(sounds, outfile)
 
+    # tag_json_path = os.path.join(BASE_DIR, DIR_BUILD, DIR_JSON, 'sounds_tags.json')
+    # with open(tag_json_path, 'w') as outfile:
+    #    json.dump(sounds_tags, outfile)
+
 def generate_costumes():
     '''
     create costumes.json
@@ -110,41 +122,57 @@ def generate_costumes():
     '''
     costumes = []
     sprites = []
-    # extract sprite2 files
+    sprites_tags = []
+    # extract sprite2/sprite3 files
     for root, dirs, files in os.walk(DIR_COSTUMES):
         for filename in files:
             full_path = os.path.join(root, filename)
             current_dir = re.sub(r"(\S*/assets/)", "", full_path)
-            tags = current_dir.split("/")[:-1]
+            # tags = current_dir.split("/")[:-1]
             extension = os.path.splitext(full_path)[1]
             extracted_path = os.path.join(DIR_EXTRACT, current_dir.split('.')[0])
-            if extension == '.sprite2' and (not os.path.exists(extracted_path)):
+            # if extension == '.sprite2' and (not os.path.exists(extracted_path)):
+            if not os.path.exists(extracted_path):
                 os.makedirs(extracted_path)
                 with zipfile.ZipFile(full_path, 'r') as zip_file:
                     zip_file.extractall(extracted_path)
     
     # create json, md5 files
     for root, dirs, files in os.walk(DIR_EXTRACT):
+        sprites_tags += dirs
         for filename in files:    
             full_path = os.path.join(root, filename)
             # origin_imgs.append(filename)
             if filename == "sprite.json":
                 current_dir = re.sub(r"(\S*/assets/)", "", full_path)
-                tags = current_dir.split("/")[2:-1]
+                tags = current_dir.split("/")[2:3]
                 with open(os.path.join(root, filename)) as sprite:
                     cur_costumes = json.load(sprite)
                 for costume in cur_costumes['costumes']:
+                    if 'costumeName' in costume.keys(): #sprite2
+                        cname = costume['costumeName']
+                        md5ext = costume['baseLayerMD5']
+                        cur_img = str(costume['baseLayerID']) + '.' + md5ext.encode('utf8').split('.')[1]
+                    else: #sprite3
+                        cname = costume['name']
+                        md5ext = costume['md5ext']
+                        cur_img = md5ext
+                    if "bitmapResolution" in costume.keys():
+                        cbitmapResolution =  costume['bitmapResolution']
+                    else:
+                        cbitmapResolution = 2  # 2 except svg
                     costumes.append({
-                        "name": costume['costumeName'],
-                        "md5": costume['baseLayerMD5'],
+                        "name": cname,
+                        "md5": md5ext,
                         "type": "costume",
                         "tags": tags,
-                        "info": [costume['rotationCenterX'], costume['rotationCenterY'], costume['bitmapResolution']]
+                        "info": [costume['rotationCenterX'], costume['rotationCenterY'], cbitmapResolution]
                         })
-                    md5path = os.path.join(DIR_COSTUMES_MD5, costume['baseLayerMD5'])            
-                    cur_img = str(costume['baseLayerID']) + '.' + costume['baseLayerMD5'].encode('utf8').split('.')[1]
+                    # md5path = os.path.join(DIR_COSTUMES_MD5, costume['baseLayerMD5'])            
+                    #cur_img = str(costume['baseLayerID']) + '.' + costume['baseLayerMD5'].encode('utf8').split('.')[1]
+                    md5path = os.path.join(DIR_COSTUMES_MD5, md5ext)            
                     for img in files:
-                        if (img == cur_img) and (not os.path.exists(md5path)):
+                        if (img == cur_img or img == md5ext) and (not os.path.exists(md5path)):
                             copyfile(os.path.join(root, img), md5path)
 
                 if "sounds" in cur_costumes.keys():
@@ -155,13 +183,59 @@ def generate_costumes():
                     costumes_len = len(cur_costumes["costumes"])
                 else:
                     costumes_len = 0
+                if 'objName' in cur_costumes.keys(): #sprite2
+                    sname = cur_costumes['objName']
+                    smd5ext = cur_costumes['costumes'][0]['baseLayerMD5']
+                    formattedSpriteJson = cur_costumes
+                else:
+                    sname = cur_costumes['name']
+                    smd5ext = cur_costumes['costumes'][0]['md5ext']
+                    # rewrite sprite 3 sounds in sprite2 format
+                    formattedSounds = []
+                    for sound in cur_costumes["sounds"]:
+                        formattedSounds.append({
+                            "soundName": sound["name"],
+                            "soundId": -1,
+                            "md5": sound["md5ext"],
+                            "sampleCount": sound["sampleCount"],
+                            "rate": sound["rate"],
+                            "format": ""
+                        })
+                    # rewrite costumes
+                    formattedCostumes = []
+                    for costume in cur_costumes["costumes"]:
+                        if "bitmapResolution" in costume.keys():
+                            cbitmapR = costume["bitmapResolution"]
+                        else:
+                            cbitmapR = 2
+                        formattedCostumes.append({
+                            "costumeName": costume["name"],
+                            "baseLayerMD5": costume["md5ext"],
+                            "bitmapResolution": cbitmapR,
+                            "rotationCenterX": costume["rotationCenterX"],
+                            "rotationCenterY": costume["rotationCenterY"]
+                        })
+                    formattedSpriteJson = {
+                        "objName": cur_costumes["name"],
+                        "sounds": formattedSounds,
+                        "costumes": formattedCostumes,
+                        "currentCostumeIndex": cur_costumes["currentCostume"],
+                        "scratchX": cur_costumes["x"],
+                        "scratchY": cur_costumes["y"],
+                        "scale": cur_costumes["size"] / 100,
+                        "direction": cur_costumes["direction"],
+                        "rotationStyle": cur_costumes["rotationStyle"],
+                        "isDraggable": cur_costumes["draggable"],
+                        "visible": cur_costumes["visible"],
+                        "spriteInfo": {}
+                    }
                 sprites.append({
-                    "name": cur_costumes["objName"],
-                    "md5": cur_costumes["costumes"][0]["baseLayerMD5"],
+                    "name": sname,
+                    "md5": smd5ext,
                     "type": "sprite",
                     "tags": tags,
                     "info": [0, costumes_len, sounds_len],
-                    "json": cur_costumes
+                    "json": formattedSpriteJson
                     })
             extension = os.path.splitext(full_path)[1]
             if extension == (".wav" or ".mp3"):
@@ -179,6 +253,10 @@ def generate_costumes():
     sprites_path = os.path.join(BASE_DIR, DIR_BUILD, DIR_JSON, 'sprites.json')
     with open(sprites_path, 'w') as outfile:
         json.dump(sprites, outfile)
+
+    # tag_json_path = os.path.join(BASE_DIR, DIR_BUILD, DIR_JSON, 'sprites_tags.json')
+    # with open(tag_json_path, 'w') as outfile:
+    #    json.dump(sprites_tags, outfile)
 
 if __name__ == '__main__':
     generate_backdrops()
